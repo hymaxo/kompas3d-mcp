@@ -34,10 +34,10 @@ their geometry, usability or recovery behavior.
 | Surface modeling | SDK documented at container level | `ISurfaceContainer` loft/sweep/NURBS/trim/sew/offset/patch collections; boundary and closure checks |
 | Sheet metal and unfolding | Native sheet plate thickness 2→3 mm and persistence live verified; bends/unfolding unverified | `validate_sheet_metal.py`; formed/flat states, relief and bend rules need further cases |
 | Sketch constraints and driving variables | Horizontal/fixed-length constraints and parameter-driven extrusion edits live verified, persisted | `validate_constraints.py`, `validate_parameters.py`; full solver constraint set unverified |
-| Assembly documents, insertion and placements | Native A3D lifecycle and linked insertion live verified; placement unverified | `validate_documents.py`; attempted UpdatePlacement failed, so no dedicated placement tool was exposed |
+| Assembly documents, insertion and placements | Native A3D lifecycle, linked insertion and source-part update after reopen live verified for one synthetic plate; placement unverified | `validate_linked_assembly.py` verifies the actual external source, volume, mass and original-file preservation; `validate_documents.py` attempted UpdatePlacement unsuccessfully |
 | Assembly mates and mechanisms | SDK documented | `IKompasDocument3D1.MateConstraints`, `IMateConstraint3D`; verify intended degrees of freedom |
 | Native drawings/fragments and geometric primitives | Six native document kinds, line/circle/text and measured linear dimension live verified and persisted | `validate_documents.py`; broader annotation styles remain SDK routes |
-| Associative model views and annotations | Three standard views and persistence live verified; source-change propagation unverified | Dimensions use explicit coordinates, not automatic model-edge association |
+| Associative model views and annotations | Exact front/top/left projection and thickness 8→12→16→12 mm live verified with a revision-source rebind, geometry checks and save/reopen; repeated edits at the same source path can leave stale views | `validate_associative_drawing.py`; generic dimensions use explicit coordinates. The acceptance case adds an explicit native constraint to the projected edge |
 | Specifications/BOM, variants | SDK entry points identified, workflows unverified | `ISpecification3D`, `SpecificationDescriptions`, `IEmbodimentsManager`; document linkage and variant isolation |
 | Material and density | SetMaterial plus mass readback live checked on a cylinder | High-level set_material; not material-library certification |
 | Libraries, routing, welding, simulation and third-party add-ins | Unestablished as complete workflows | Need installed subsystem, license and Automation evidence |
@@ -70,6 +70,86 @@ API discovery exposes 1,119 installed API5/API7 interface wrappers. This count i
 an inventory, not 1,119 verified workflows. The 41 MCP tools include general
 definition configuration, interface casting and typed dependent batches so SDK
 operations can be attempted without adding one wrapper per button.
+
+## Associative views and linked sources (2026-10-09–10)
+
+These results were found and validated in a community fork
+([babichvitaly/kompas3d-mcp](https://github.com/babichvitaly/kompas3d-mcp))
+on KOMPAS-3D 25.0.0.2735 in Windows 11 ARM, using Python 3.12 x64 and the
+installed v25 SDK. They establish
+behavior for synthetic plate examples, not arbitrary existing assemblies or
+drawings.
+
+### Exact projection and the empty-view failure
+
+On this installation `AddStandartViews` inherited
+`IAssociationView.UseOcclusion=True`, which the SDK calls draft projection.
+Creation and rebuild returned success, and the views reported `Valid=True`,
+but each view contained zero objects. A successful BOOL and three collection
+entries therefore did not establish a usable drawing.
+
+`create_standard_views` now defaults to `draft_projection=False`. It identifies
+only newly created views by native `Reference`, sets their projection mode,
+then calls `Update()` and `Rebuild()` in collection order. It requires the
+requested number of new views, the requested mode, valid views and a nonzero
+`ObjectCount`. Errors include partial-view diagnostics and leave those views
+available for inspection. Existing views are not reconfigured. The returned
+handles and object counts enable subsequent geometry checks; a nonzero count
+alone still does not prove the intended projection.
+
+The real stdio MCP check discovered 41 tools and created three exact views,
+each with four projected edges. Source-edit validation additionally checked the
+actual `SourceFileName`, line endpoints and extents, rather than only view count:
+the 80×50 mm front view remained fixed, the top view changed from 80×8 to 80×12 mm,
+and the left view from 8×50 to 12×50 mm. Model volume changed from 32,000 to
+48,000 mm³. These states were verified after native save/reopen. The test's
+explicitly constrained thickness dimension followed 8→12 mm and persisted.
+
+The full 8→12→16→12 mm acceptance passed in
+`artifacts/associative-drawing-ccbfb52e/report.json`, produced by
+`scripts/validate_associative_drawing.py`. After the first edit to 12 mm, each
+subsequent edit starts by copying the current saved M3D byte-for-byte to a new
+revision path **before changing its parameter**. The new revision is edited,
+saved/reopened and measured; the preceding file stays unchanged. The test then
+sets `SourceFileName` on all three existing views and calls `Update()` on each,
+followed by rebuilding all views and the drawing. The same views and explicitly
+associated dimension followed 16 mm and then 12 mm, including save/reopen at both
+steps. The final dimension had valid endpoint constraints referring to actual
+projected edges after reopen. Model geometry, view geometry and source links were
+rechecked. SHA-256 checks confirmed that the original plate, the saved 12 mm
+baseline and both completed revisions were not changed by subsequent operations.
+The resulting CDW depends on the final revision M3D; keep that source with the
+drawing and retain preceding revisions as history.
+
+This verifies the revision-source workflow on the synthetic plate. Repeated
+in-place source updates remain a known limitation on this installation: the
+third edit in the 8→12→16→12 mm sequence left the existing projections at 16 mm
+despite the saved source measuring 12 mm and successful rebuild returns.
+The same failure occurred without a dimension, excluding the test's dimension
+constraint as its cause. Do not infer that the revision workaround fixes native
+same-path refresh, or that it safely redirects dependencies in arbitrary user
+assemblies and drawings.
+
+`TreeNeedRebuild` and `IPart7.NeedRebuild` are automatic-update policy properties,
+not dirty/error indicators. Do not use their Boolean values as rebuild success
+criteria; inspect the resulting native geometry and references.
+
+### Linked assembly update
+
+`artifacts/linked-assembly-b4aad7b0/report.json` passed
+`scripts/validate_linked_assembly.py`. A one-component A3D referenced a copied
+80×50×8 mm plate. Changing that source to 12 mm and rebuilding the open assembly
+updated its volume from 32,000 to 48,000 mm³ and mass from 0.2512 to 0.3768 kg
+at the test density of 7.85 g/cm³. After save/reopen the component remained valid
+and externally linked to the intended working copy, with the updated measurements.
+The source variable persisted and the original plate's SHA-256 was unchanged.
+This case does not validate placements, mates or dependency copying for a
+pre-existing multi-file assembly.
+
+The 26 unit tests passed on Windows and macOS, including 10 new wrapper-contract
+cases for empty/invalid views, partial mutations, projection mode, collection
+reordering and MCP argument forwarding. These tests complement the live results;
+they do not establish CAD geometry.
 
 ## Acceptance rules for promoting coverage
 

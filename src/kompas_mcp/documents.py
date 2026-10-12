@@ -174,8 +174,13 @@ def create_standard_views(
     gap_x: float = 30,
     gap_y: float = 30,
     orientation: str = "",
+    draft_projection: bool = False,
 ):
-    """Add associative model views; orientation is a native named model orientation."""
+    """Add and verify associative model views using exact projection by default.
+
+    orientation is a native named model orientation. draft_projection selects
+    the SDK's draft projection mode (IAssociationView.UseOcclusion).
+    """
     import math
 
     import pythoncom
@@ -209,20 +214,72 @@ def create_standard_views(
     drawing = _cast(k, doc, "IKompasDocument2D")
     views = drawing.ViewsAndLayersManager.Views
     before = views.Count
+    before_references = {views.View(i).Reference for i in range(before)}
+
+    def new_views():
+        # View numbers/indices can be reused or reordered. Only native identity
+        # distinguishes new views from the user's existing drawing contents.
+        current = [views.View(i) for i in range(views.Count)]
+        return [view for view in current if view.Reference not in before_references]
+
     kinds = VARIANT(
         pythoncom.VT_ARRAY | pythoncom.VT_I4,
         [k.constants[projection_constants[p]] for p in projections],
     )
-    require(
-        views.AddStandartViews(
-            str(source.resolve()), orientation, kinds, x, y, scale, gap_x, gap_y
-        ),
-        "create associative views",
-    )
+    try:
+        require(
+            views.AddStandartViews(
+                str(source.resolve()), orientation, kinds, x, y, scale, gap_x, gap_y
+            ),
+            "create associative views",
+        )
+        created = new_views()
+        if len(created) != len(projections):
+            raise RuntimeError(
+                f"Expected {len(projections)} new views, found {len(created)}"
+            )
+        associations = [_cast(k, view, "IAssociationView") for view in created]
+        for view in associations:
+            # AddStandartViews inherits application defaults. Draft projection
+            # reported success but no drawing objects on the tested installation.
+            view.UseOcclusion = draft_projection
+            require(view.Update(), f"update view {view.Number}")
+            require(view.Rebuild(), f"rebuild view {view.Number}")
+        metadata = [
+            {
+                "number": view.Number,
+                **k.pack(view),
+                "object_count": view.ObjectCount,
+                "draft_projection": bool(view.UseOcclusion),
+                "valid": bool(view.Valid),
+            }
+            for view in associations
+        ]
+        if any(
+            not view["valid"]
+            or view["object_count"] <= 0
+            or view["draft_projection"] != draft_projection
+            for view in metadata
+        ):
+            raise RuntimeError("New views are invalid, empty, or use the wrong projection mode")
+    except Exception as exc:
+        try:
+            partial = [
+                {"number": view.Number, "object_count": view.ObjectCount}
+                for view in new_views()
+            ]
+        except Exception as diagnostic_error:  # noqa: BLE001 - preserve the original COM error
+            partial = f"unavailable ({diagnostic_error})"
+        raise RuntimeError(
+            f"Associative view creation failed: {exc}. Created views: {partial}. "
+            "Any partially created views remain in the drawing; inspect them before retrying."
+        ) from exc
     return {
         "views": k.pack(views),
         "count_before": before,
         "count_after": views.Count,
+        "created_count": len(metadata),
+        "created_views": metadata,
         "model_path": str(source.resolve()),
     }
 

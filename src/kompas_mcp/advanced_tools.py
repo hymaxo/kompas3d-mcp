@@ -134,11 +134,18 @@ def register(mcp, worker):
         gap_x: float = 30,
         gap_y: float = 30,
         orientation: str = "",
+        draft_projection: bool = False,
     ) -> dict:
-        """Create associative engineering views from a native model in a drawing. Coordinates/gaps are mm."""
+        """Create and verify associative views using exact projection by default.
+
+        Coordinates/gaps are mm. draft_projection=true selects the SDK's draft
+        projection mode. Empty/invalid views are reported as errors; any partial
+        views remain for inspection. Returns handles and object counts for new views.
+        """
         return await worker.call(
             lambda k: documents.create_standard_views(
-                k, drawing_handle, model_path, projections, x, y, scale, gap_x, gap_y, orientation
+                k, drawing_handle, model_path, projections, x, y, scale, gap_x, gap_y,
+                orientation, draft_projection
             )
         )
 

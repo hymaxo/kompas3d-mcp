@@ -67,6 +67,61 @@ Standart is correct. ProjectionsTypes requires a SAFEARRAY of VT_I4 projection
 enums, not an arbitrary variant array. Use a saved source model and a verified
 orientation name. Source: `iviews_addstandartviews.html`.
 
+The high-level tool explicitly defaults to exact projection
+(`draft_projection=false`, native `IAssociationView.UseOcclusion=False`), then
+updates/rebuilds and checks only its newly created views. On a tested Windows ARM
+v25 installation, inherited draft projection created empty views despite
+successful API returns. An empty/invalid result now reports the partial view
+numbers for inspection; do not blindly retry and duplicate them. The geometric
+cause inside the draft renderer is not established.
+
+Repeated source updates need a geometry check even when every rebuild returns
+true. On the tested v25 installation, the final 16→12 mm step of an 8→12→16→12 mm
+sequence left existing projections at 16 mm while the saved M3D measured 12 mm.
+The same failure occurred without any dimension. Refreshing the same filename
+is therefore not established as reliable for repeated edits on this installation.
+
+Live verified on 9–10 October 2026: use a unique revision M3D as the source of
+the existing drawing views. **Before each subsequent edit**, copy the current
+saved M3D byte-for-byte to a new revision path, then edit that copy. Save/reopen
+the new revision and verify its geometry; hash-check that the previous source
+stayed unchanged. Keep previous revisions instead of overwriting them. Identify
+**all affected views** by their actual `SourceFileName`; retain their native
+`Reference` values and dimension bindings in the current session. Set each
+`IAssociationView.SourceFileName` to the revision path and call `Update()` for
+each. Once all affected views have been updated, call `Rebuild()` for all of them,
+then `IKompasDocument2D1.RebuildDocument()`. Do not recreate views or annotations
+to claim their native associations were preserved.
+
+Verify actual source paths, projected edges/extents and measured dimension values,
+then save/reopen CDW and repeat the checks. Native references may change across a
+document close/reopen; rediscover them. The clean `validate_associative_drawing.py`
+run `artifacts/associative-drawing-ccbfb52e/report.json` passed the synthetic plate's
+full 8→12→16→12 mm cycle. After the first 8→12 edit, both later steps used a copy
+created before editing and rebound all three existing views. The explicitly
+associated thickness dimension survived both save/reopen steps, with valid
+endpoint constraints referring to projected edges after the final reopen.
+The original M3D, saved 12 mm baseline and completed revisions passed hash checks
+against later changes. Keep the final revision M3D with the dependent CDW.
+This is a verified workflow for that fixture, not a fix for same-path refresh or a guarantee for
+complex assemblies, sections and annotation networks. See `docs/coverage.md`
+in the repository for evidence.
+
+For the measured linear-dimension case, `draw_linear_dimension` initially creates
+a coordinate-based annotation. The acceptance script explicitly adds
+`IDrawingObject1.NewConstraint()`, sets `ConstraintType=ksCAssociation`, assigns
+the projected edge as `Partner`, and calls `Create()`. The installed SDK's
+`newconstraint_example.html` allows a single dispatch partner. KOMPAS stored this
+case as two valid `ksCMergePoints` endpoint constraints. Verify the binding through
+actual source edits and save/reopen, not just the creation enum or a nominal value.
+Sources: `iassociationview_sourcefilename.html`, `iassociationview_rebuild.html`,
+`ikompasdocument2d1_rebuilddocument.html`, `newconstraint_example.html`,
+`iparametriticconstraint_partner.html`.
+
+`TreeNeedRebuild` controls automatic tree rebuilding when its contents change;
+`IPart7.NeedRebuild` controls rebuilding on property changes. Neither is a
+geometry-error flag. Use measured geometry and native association checks instead.
+
 `IView` / `IAssociationView` expose view placement and model association.
 Discover documented section/detail creation rather than manually approximating
 hidden geometry. Determine first/third-angle projection from source conventions.
@@ -108,4 +163,3 @@ interference where relevant. Save source parts and assembly consistently so it
 reopens without unresolved references. For variants, discover
 `IEmbodimentsManager` and inspect the active embodiment before editing; never
 assume a change applies only to the visible variant.
-
