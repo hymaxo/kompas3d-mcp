@@ -176,6 +176,10 @@ This does not establish arbitrary blueprint reconstruction or every release/lice
 - [Official MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 - [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
 
+## Questions, suggestions and bugs
+
+For any questions, ideas or bug reports, please open an [issue](https://github.com/hymaxo/kompas3d-mcp/issues/new) in this repository. For bugs, include your KOMPAS-3D version, the MCP client you use, reproduction steps and the error message.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE). KOMPAS-3D and its SDK
