@@ -23,6 +23,30 @@ For a drawing or scan, use `$kompas-blueprints` if available, or follow the same
 4. `model_preview` returns the current view. Check hole placement, handedness, and proportions visually as well as numerically. `inspect_model` bounds are `[success,xmin,ymin,zmin,xmax,ymax,zmax]`. Bounds do not establish that holes are correct; compare volume and inspect topology.
 5. `save_model` to an absolute `.m3d` path. Export only requested formats with `export_model`. Existing paths require an explicit overwrite choice. Provide saved paths and concise assumptions/verification notes.
 
+## Mandatory detail review for complex models
+
+Maintain a compact feature/region checklist linking requirements to model features
+and verification evidence. Inspect every region, including small edge treatments,
+holes and their ends, recesses, wall thickness, internal geometry, interfaces and
+repeated-feature counts/spacing. For drawings, use the coverage ledger described
+in `$kompas-blueprints`; include every view, section and annotation.
+
+Any plausible risk of overlooking or misinterpreting a detail requires a closer
+inspection. Use overlapping `blueprint_view` crops for source details and
+`model_preview(document_id, crop=[left,top,right,bottom])` for visible model regions.
+When given a drawing, cropping each complex, crowded or ambiguous region and
+examining the returned pieces individually is mandatory; a full-sheet overview
+does not satisfy this check. Subdivide further if the details remain unreadable.
+Check crop boundaries. Cropping does not improve the source resolution or expose
+hidden geometry: use documented native zoom, orientation or section controls and
+topology measurements where needed. Cross-check features numerically and from
+all relevant directions, not only a single isometric view or overall bounds.
+
+Audit the checklist before delivery. Record and disclose each unchecked feature,
+the reason and the evidence needed to resolve it; ask for missing critical input
+while continuing independent work. Do not silently simplify uncertain details or
+describe a model as fully verified while any check remains unresolved.
+
 ## Geometry rules
 
 - Sketch coordinates are local 2D coordinates on XY, XZ, or YZ. On XY, positive normal is +Z. Determine other plane orientations from a small measured feature or SDK placement data rather than guessing from the rendered screen.
@@ -47,5 +71,9 @@ surface-aware checks because zero material volume can be correct.
 For model families, constrain functional interfaces and drive dimensions with
 variables. For assemblies, retain component occurrences and mates in A3D.
 For manufacturing drawings, preserve associative views and native annotations.
+When interpreting drawings, carefully distinguish dimension and extension lines
+from actual part geometry. Check arrowheads, labels, line styles, endpoints and
+agreement across views, not color alone. Crop ambiguous regions before treating
+a line as an edge or modeling it as a feature.
 The API skill has separate guidance for these workflows.
 

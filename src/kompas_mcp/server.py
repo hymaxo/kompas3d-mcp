@@ -13,6 +13,31 @@ from .worker import ComWorker
 
 worker = ComWorker()
 
+DETAIL_REVIEW = (
+    "Carefully distinguish dimension and extension lines from actual part geometry. "
+    "Use arrowheads, labels, line styles, endpoints and agreement across views, not color "
+    "alone. Crop and inspect ambiguous lines before interpreting them as edges or features. "
+    "For every drawing reconstruction and complex 3D model, mandatory detail review: "
+    "inspect every source page, view, section, note and model region, including small or "
+    "apparently minor features. Keep a coverage ledger linking each feature to source evidence, "
+    "dimensions, implementation and verification status. Explicitly check holes and their ends, "
+    "recesses, thin walls, steps, fillets, chamfers, threads, repeated-feature counts and spacing, "
+    "hidden geometry, handedness, units and tolerances where applicable. "
+    "Whenever a detail could be missed or misread, inspect it at readable scale before deciding. "
+    "When given a drawing, you MUST crop each complex, crowded or ambiguous region with "
+    "blueprint_view and inspect the returned pieces individually at readable scale; an overview "
+    "alone is insufficient. Subdivide further until its details can be read, or record the "
+    "source limitation. Cover dense sheets with overlapping tiles and inspect tile seams. "
+    "Use model_preview crops for visible regions; change orientation or use documented native "
+    "zoom/section controls and topology measurements for hidden or unresolved model details. "
+    "Cropping cannot reveal occluded geometry or recover pixels absent from a raster. "
+    "Cross-check every feature against all relevant views and numerical geometry, not just "
+    "the silhouette, bounds or a single isometric image. Review the ledger before delivery. "
+    "If evidence or inspection tools are insufficient, record the exact unchecked region and "
+    "reason, request the missing source or critical clarification, and continue independent work. "
+    "Never silently omit a detail, guess it as fact, or claim full verification with open items. "
+)
+
 
 @asynccontextmanager
 async def lifespan(server):
@@ -28,7 +53,8 @@ mcp = FastMCP(
     instructions=(
         "Create editable KOMPAS-3D models. Dimensions are mm, angles degrees. "
         "Inspect blueprint images before modeling. Track given dimensions separately from assumptions. "
-        "Use document and entity IDs returned by tools; never assume the active UI document. "
+        + DETAIL_REVIEW
+        + "Use document and entity IDs returned by tools; never assume the active UI document. "
         "A failed or cancelled mutation may leave partial geometry: inspect before retrying. "
         "Prefer typed tools; api_invoke is an advanced local COM escape hatch, not a sandbox."
     ),
@@ -124,14 +150,21 @@ async def export_model(document_id: str, path: str, overwrite: bool = False) -> 
 
 
 @mcp.tool()
-async def model_preview(document_id: str) -> Image:
-    """Render the document's current view to a PNG image for visual verification."""
+async def model_preview(
+    document_id: str, crop: tuple[float, float, float, float] | None = None
+) -> Image:
+    """Render the current view, optionally cropping normalized [left,top,right,bottom].
+
+    Crop before downsampling (2400px max) to inspect visible details. This does not
+    zoom the CAD camera or expose hidden faces: reorient/zoom/section using documented
+    API controls and render again when the source view lacks the required detail.
+    """
     import tempfile
 
     path = str(Path(tempfile.gettempdir()) / f"kompas-preview-{uuid4().hex}.png")
-    await worker.call(lambda k: k.preview(document_id, path))
     try:
-        return Image(data=Path(path).read_bytes(), format="png")
+        await worker.call(lambda k: k.preview(document_id, path))
+        return blueprint_view(path, crop=crop)
     finally:
         Path(path).unlink(missing_ok=True)
 
@@ -232,7 +265,8 @@ def model_from_blueprint(source: str) -> str:
     """Dimension-led reconstruction of a blueprint into an editable native part."""
     return (
         f"Reconstruct {source} in KOMPAS-3D. Use blueprint_view and detail crops. "
-        "Record explicit dimensions, units, projections, datums, holes and uncertainties. "
+        + DETAIL_REVIEW
+        + "Record explicit dimensions, units, projections, datums, holes and uncertainties. "
         "Resolve critical ambiguity before geometry. Build named sketches and features, "
         "check bounds and rendered views against all projections, then save native M3D. "
         "Report assumptions and verification limits."
@@ -246,7 +280,7 @@ def model_from_description(description: str) -> str:
         f"Create in KOMPAS-3D: {description}\nSeparate required dimensions from "
         "design choices. Choose datum planes and a short editable feature sequence. "
         "Use revolutions for turned shapes and extrusions for prismatic parts. "
-        "Verify geometry and save native M3D; report any assumed dimensions."
+        "Verify geometry and save native M3D; report any assumed dimensions. " + DETAIL_REVIEW
     )
 
 
